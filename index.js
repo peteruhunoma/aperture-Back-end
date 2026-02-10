@@ -245,15 +245,15 @@ app.use('/posts', products);
 
 
 
+pool.on('connect', () => {
+  console.log('Connected to PostgreSQL database');
+});
 
-pool.getConnection()  .then(conn => {
-    console.log('Connected to database');
-    conn.release();
-  })
-  .catch(err => {
-    console.error('Database connection failed:', err);
-    process.exit(1);
-  });
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+  process.exit(-1);
+});
+
 
 
 
