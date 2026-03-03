@@ -1,17 +1,13 @@
-const { Pool } = require("pg");
-require('dotenv').config();
+const mysql = require("mysql2/promise");
 
-const pool = new Pool({
-    user: 'postgres',
-    host: 'db.ambzrigctcmrshdvnvlo.supabase.co',
-    database: 'postgres',
-    password: '#freezeDarius1',
-    port: 6543,
-    ssl: {
-      rejectUnauthorized: false
-    },
-    connectionTimeoutMillis: 10000, // 10 second timeout
-    options: '-c search_path=public'
-  });
- 
+const pool = mysql.createPool({
+    host: "mysql-aperture.alwaysdata.net",
+    user: "aperture",
+    password: "freezeDarius#1",
+    database: "aperture_two",
+    port:3306,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
 module.exports = pool;
