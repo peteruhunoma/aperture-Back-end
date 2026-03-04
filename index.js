@@ -24,7 +24,7 @@ const app = express();
 
                                                   
 app.use(cors(
-  {origin: 'http://localhost:5173/', 
+  {origin: 'https://aperture-two.vercel.app', 
 credentials: true}));
 app.use(cookieParser());
 app.use(express.json()); 
@@ -254,6 +254,7 @@ pool.getConnection()  .then(conn => {
     console.error('Database connection failed:', err);
     process.exit(1);
   });
+
 
 
   module.exports = app;
