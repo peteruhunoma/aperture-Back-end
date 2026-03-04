@@ -109,7 +109,21 @@ const logout = async (req, res) => {
 }
 
 
- 
+
+const  guestSession = async (req, res, next) => {
+  if (!req.cookies.guest_sid) {
+    const sid = randomUUID();               
+    res.cookie('guest_sid', sid, {
+      httpOnly: true,
+      maxAge: 30 * 24 * 60 * 60 * 1000,    
+      sameSite: 'none'
+    });
+    req.guestSessionId = sid;
+  } else {
+    req.guestSessionId = req.cookies.guest_sid;
+  }
+  next();
+}
 
 const uploadUserImage = async (req, res) => {
   try {
