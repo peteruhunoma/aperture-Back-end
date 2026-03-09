@@ -12,6 +12,7 @@ const multiparty = require('multiparty');
 const path = require('path');
 const busboy = require('busboy');
 const fs = require("fs");
+const cloudinary = require('./cloudinary.js');
 const {verifyTokenCookie} = require("./controllers/middlewareAuth.js");
 const { guestSession} = require("./controllers/shopper_login.js");
 
@@ -24,7 +25,7 @@ const app = express();
 
                                                   
 app.use(cors(
-  {origin: 'https://aperture-two.vercel.app', 
+  {origin: 'http://localhost:5173', 
 credentials: true}));
 app.use(cookieParser());
 app.use(express.json()); 
@@ -32,194 +33,163 @@ app.use(verifyTokenCookie);
 app.use(guestSession);
 
 
-app.get('/favicon.ico', (req, res)=>{
+app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 })
-app.post('/uploaduserimg', (req, res) => {
-  const form = new multiparty.Form({
-    uploadDir: path.join(__dirname, '../client/aperture/public/uploadeduser'),
-  });
 
-  form.parse(req, (err, fields, files) => {
+app.post('/uploaduserimg', (req, res) => {
+  const form = new multiparty.Form();
+
+  form.parse(req, async (err, fields, files) => {
     if (err) return res.status(500).send('Upload error');
 
-    const uploadedFile = files.image?.[0]; // assuming <input name="file" />
+    const uploadedFile = files.image?.[0];
 
     if (!uploadedFile) {
       return res.status(400).send("No file uploaded");
     }
-    
+
     const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
 
     if (!allowedTypes.includes(uploadedFile.headers['content-type'])) {
-      // Remove the unwanted file
       fs.unlinkSync(uploadedFile.path);
       return res.status(400).send('only image format');
     }
 
-    const newFilename = path.basename(uploadedFile.path);
+    try {
+      const result = await cloudinary.uploader.upload(uploadedFile.path, {
+        folder: 'public/uploadeduser', // ✅ nested under public
+      });
 
-    res.send(newFilename); // ⬅️ return just the filename as a string
+      fs.unlinkSync(uploadedFile.path);
+      res.send(result.secure_url);
+
+    } catch (uploadErr) {
+      if (fs.existsSync(uploadedFile.path)) fs.unlinkSync(uploadedFile.path);
+      res.status(500).send('Cloudinary upload error');
+    }
   });
 });
 
 
 app.post('/upload', async (req, res) => {
   const token = req.cookies.control_cookies;
-  
+
   if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
   }
-  
+
   jwt.verify(token, "pwduserkey", async (err, userInfo) => {
     if (err) {
       console.log('JWT Error:', err);
       return res.status(403).json({ error: "Invalid token" });
     }
-    
+
     console.log('User Info:', userInfo);
-    
-    // Setup directories
-    const publicDir = path.join(__dirname, '../client/aperture/public');
-    const userDir = path.join(publicDir, userInfo.res.username);
-    
-    // Verify public directory exists
-    if (!fs.existsSync(publicDir)) {
-      return res.status(500).json({ 
-        error: 'Public directory does not exist',
-        path: publicDir
-      });
-    }
-    
-    // Create user directory
-    if (!fs.existsSync(userDir)) {
-      fs.mkdirSync(userDir, { recursive: true });
-      console.log('✓ Created user directory:', userInfo.res.username);
-    }
-    
-    // Parse form data first to get productName
-    const form = new multiparty.Form({ 
-      uploadDir: userDir, // Temporary upload to user directory
-      maxFilesSize: 90 * 1024 * 1024, // 50MB total limit
-      maxFiles: 5 // Maximum 5 files
+
+    const form = new multiparty.Form({
+      maxFilesSize: 90 * 1024 * 1024,
+      maxFiles: 5
     });
-    
+
     form.parse(req, async (parseErr, fields, files) => {
       if (parseErr) {
         console.error('Parse error:', parseErr);
-        return res.status(500).json({ 
-          error: 'Upload error', 
-          details: parseErr.message 
+        return res.status(500).json({
+          error: 'Upload error',
+          details: parseErr.message
         });
       }
-      
-      // Extract productName from fields (multiparty returns arrays)
+
       const productName = fields.productName ? fields.productName[0] : null;
-      
+
       if (!productName) {
-        // Clean up uploaded files
         if (files.images) {
           files.images.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
           });
         }
         return res.status(400).json({ error: "Product name is required" });
-        
       }
-      
+
       console.log('Product Name:', productName);
-      
+
+      const cleanupTemp = () => {
+        if (files.images) {
+          files.images.forEach(file => {
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+          });
+        }
+      };
+
       try {
-        // Query database
         const productQ = await pool.query(
-          "SELECT `ProductName` FROM products WHERE username = ? AND `productName` = ?", 
+          "SELECT `ProductName` FROM products WHERE username = ? AND `productName` = ?",
           [userInfo.res.username, productName]
         );
-        
+
         console.log(productQ, "Database query result");
-        
-        // Create product directory
-        const productDir = path.join(userDir, productName);
-        
-        if (!fs.existsSync(productDir)) {
-          fs.mkdirSync(productDir, { recursive: true });
-          console.log('✓ Created product directory:', productName);
-        }
-        
-        // Get uploaded images
+
         const uploadedImages = files.images || [];
-        
+
         if (uploadedImages.length === 0) {
           return res.status(400).json({ error: "No files uploaded" });
         }
-        
+
         if (uploadedImages.length > 5) {
-          // Clean up all uploaded files
-          uploadedImages.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
+          cleanupTemp();
           return res.status(400).json({ error: "Maximum 5 images allowed" });
         }
-        
+
         const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-        const processedFilenames = [];
-        
-        // Process each uploaded file
+        const processedUrls = [];
+
+        // ✅ Check if public/{username} folder exists, create if not
+        const userFolder = `public/${userInfo.res.username}`;
+        try {
+          await cloudinary.api.sub_folders(userFolder);
+          console.log(`✓ Folder "${userFolder}" already exists`);
+        } catch (folderErr) {
+          if (folderErr.error?.http_code === 404) {
+            await cloudinary.api.create_folder(userFolder);
+            console.log(`✓ Created folder "${userFolder}"`);
+          }
+        }
+
         for (const uploadedFile of uploadedImages) {
-          // Check file type
           if (!allowedTypes.includes(uploadedFile.headers['content-type'])) {
-            // Clean up all uploaded files
-            uploadedImages.forEach(file => {
-              if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-              }
-            });
-            return res.status(400).json({ 
-              error: 'Only image formats (JPEG, PNG, JPG) allowed' 
+            cleanupTemp();
+            return res.status(400).json({
+              error: 'Only image formats (JPEG, PNG, JPG) allowed'
             });
           }
-          
-          // Move file from userDir to productDir
-          const oldPath = uploadedFile.path;
-          const newFilename = path.basename(uploadedFile.path);
-          const newPath = path.join(productDir, newFilename);
-          
-          // Move the file
-          fs.renameSync(oldPath, newPath);
-          
-          processedFilenames.push(newFilename);
-          console.log('✓ Upload successful:', newFilename);
+
+          // ✅ Upload to public/{username}/{productName}
+          const result = await cloudinary.uploader.upload(uploadedFile.path, {
+            folder: `public/${userInfo.res.username}/${productName}`,
+          });
+
+          fs.unlinkSync(uploadedFile.path);
+
+          processedUrls.push(result.secure_url);
+          console.log('✓ Upload successful:', result.secure_url);
         }
-        
-        // Return comma-separated list of filenames
-        const result = processedFilenames.join(',');
+
+        const result = processedUrls.join(',');
         console.log('✓ All uploads complete:', result);
-        
-        res.status(200).json({ 
+
+        res.status(200).json({
           success: true,
           filenames: result,
-          fileCount: processedFilenames.length
+          fileCount: processedUrls.length
         });
-        
+
       } catch (dbErr) {
         console.error('Database error:', dbErr);
-        
-        // Clean up uploaded files on error
-        if (files.images) {
-          files.images.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
-        
-        return res.status(500).json({ 
-          error: 'Database query failed', 
-          details: dbErr.message 
+        cleanupTemp();
+        return res.status(500).json({
+          error: 'Database query failed',
+          details: dbErr.message
         });
       }
     });
@@ -256,5 +226,6 @@ pool.getConnection()  .then(conn => {
   });
 
 
-
-  module.exports = app;
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
