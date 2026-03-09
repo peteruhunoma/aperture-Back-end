@@ -215,17 +215,4 @@ app.use('/posts', products);
 
 
 
-
-pool.getConnection()  .then(conn => {
-    console.log('Connected to database');
-    conn.release();
-  })
-  .catch(err => {
-    console.error('Database connection failed:', err);
-    process.exit(1);
-  });
-
-
-  app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
-  });
+ module.exports = app;
