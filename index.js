@@ -214,5 +214,15 @@ app.use(verifyTokenCookie);
 app.use('/posts', products);
 
 
+pool.getConnection()  .then(conn => {
+  console.log('Connected to database');
+  conn.release();
+})
+.catch(err => {
+  console.error('Database connection failed:', err);
+  process.exit(1);
+});
+
+
 
  module.exports = app;
