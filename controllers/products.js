@@ -403,7 +403,7 @@ const getCartAfterPurchase =  async (req, res) => {
 
 
 const deleteCart =  async (req, res) => {
-  const { productId } = req.body;
+  const { productId } = req.params;
   const userId = req.user?.res?.id || null;
   const guestSessionId = req.guestSessionId;
 
