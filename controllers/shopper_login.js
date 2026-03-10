@@ -87,8 +87,8 @@ const login = async (req, res) => {
     
     res.cookie("control_cookies", token, {
       httpOnly: true,
-      secure: false,
-      sameSite: 'Lax'
+      secure: true,
+      sameSite: 'None'
     }).status(200).json(userData);
     
     console.log(userData);
@@ -116,7 +116,8 @@ const  guestSession = async (req, res, next) => {
     res.cookie('guest_sid', sid, {
       httpOnly: true,
       maxAge: 30 * 24 * 60 * 60 * 1000,    
-      sameSite: 'none'
+      sameSite: "none",
+      secure : true
     });
     req.guestSessionId = sid;
   } else {
